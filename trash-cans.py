@@ -1,8 +1,7 @@
 # trash cans manip solver
-# version 0.1
-# author: https://github.com/minnowsr/trash-cans-searcher
+# author: minnowsr (https://github.com/minnowsr/trash-cans-searcher)
 
-DIRECTIONS = ["up", "down", "left", "right", "none"]
+DIRECTIONS = ["up", "down", "left", "right"]
 FRAMES_TO_GYM = 190
 FRAME_WINDOW = 15
 
@@ -11,6 +10,16 @@ class RNG:
         self.initial_seed = seed
         self.seed = seed
         self.frame = 1
+     
+    @staticmethod
+    def seed_datetime(year, month, day, hour, minute, second, frames):
+        xx = day * month + minute + second
+        yy = hour
+        zzzz = frames + year % 2000
+
+        seed = int(f"{xx}{yy}{zzzz}")
+
+        return seed
 
     def advance(self, n=1):
         for i in range(n):
@@ -62,19 +71,18 @@ class RNG:
         can_2_candidates = can_2_directions[can_1]
         can_2 = can_2_candidates[self.next(2).upper16() % len(can_2_candidates)]
 
-        return f"{can_1+1}{can_2}"
+        return f"{can_1+1}-{can_2}"
 
     def print(self):
         print(hex(self.seed))
 
 class NPC:
-    def __init__(self, tick, bounds, npc_type, name="", extra_tick=0):
+    def __init__(self, tick, name="", extra_tick=0):
         self.tick = tick + extra_tick
 
-        self.max_x, self.max_y = bounds
+        self.max_x, self.max_y = 2, 2
         self.x, self.y = 1, 1
 
-        self.npc_type = npc_type
         self.name = name
 
         self.direction = 4
@@ -110,7 +118,7 @@ class NPC:
         return 9 if cond else 2
 
     def print(self):
-        print(f"{self.name}: ({self.x}, {self.y}) | tick: {self.tick} | last_direction: {DIRECTIONS[self.direction]}")
+        print(f"{self.name}: ({self.x}, {self.y}) | tick: {self.tick} | movement history: {self.direction_history}")
     
     def advance(self, rng, can_move=True):
         self.tick -= 1
@@ -127,17 +135,43 @@ class NPC:
             rng.advance()
             self.chose_direction = False
 
-rng = RNG(0x3a73Ab23)
-npcs = [NPC(rng.advance().get_cycle(), (2,2), 2, "girl", 0), NPC(rng.advance().get_cycle(), (2,2), 2, "guy", 0)]
 
-frames = []
+seeds = []
 
-for frame in range(FRAMES_TO_GYM+FRAME_WINDOW):
-    if frame > FRAMES_TO_GYM:
-        cans = rng.solve_cans()
-        frames.append((f"{hex(rng.next(2).seed)} frame {frame}: ({''.join(npcs[0].direction_history)}, {''.join(npcs[1].direction_history)})  {cans}"))
+hour, day, month, year = 12, 1, 1, 2098
+minute_low, minute_high = 38, 55
+delay_low, delay_high = 550, 570
+frame_low, frame_high = 1600, 1740
 
-    for npc in npcs:
-        npc.advance(rng)
+print(f"{year}/{month}/{day}")
+for minute in range(minute_low, minute_high, 1):
+    for second in range(60):
+        for delay in range(delay_low, delay_high, 2):
+            rng = RNG(RNG.seed_datetime(year, month, day, hour, minute, second, delay))
+            print(f"frame {(delay_high-delay)//2} ({hour}:{minute}:{str(second).zfill(2)}) {hex(rng.initial_seed)[2:]}:\n")
 
-print('\n'.join(frames))
+            if rng.initial_seed in seeds:
+                continue
+
+            for curr_frame in range(frame_low, frame_high):
+                print(f"{curr_frame}: ")
+                rng.reset()
+                rng.advance(curr_frame)
+
+                npcs = [NPC(rng.advance().get_cycle(), "girl"), NPC(rng.advance().get_cycle(), "guy")]
+
+                frames = []
+
+                for frame in range(FRAMES_TO_GYM+FRAME_WINDOW):
+                    if frame > FRAMES_TO_GYM:
+                        cans = rng.solve_cans()
+                        res = f"\tgirl: {'-'.join(npcs[0].direction_history)}, guy: {'-'.join(npcs[1].direction_history)}: {cans}"
+                        if res not in frames:
+                            frames.append(res)
+
+                    for npc in npcs:
+                        npc.advance(rng)
+
+                print('\n'.join(frames))
+            seeds.append(curr_frame) 
+            print('\n\n')
